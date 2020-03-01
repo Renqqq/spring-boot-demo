@@ -18,7 +18,7 @@ public class JedisSpringPoolConfig {
      *
      * @return 连接池对象
      */
-    @Bean
+//    @Bean
     public JedisPool jedisPool() {
         JedisPoolConfig config = new JedisPoolConfig();
         JedisPool pool = new JedisPool(config, "master");

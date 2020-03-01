@@ -3,6 +3,7 @@ package com.springboot.demo.springbootdemo.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Service;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -11,33 +12,33 @@ import redis.clients.jedis.params.SetParams;
 import java.util.Collections;
 
 @Service
+@ConfigurationProperties("redis.jedis")
 public class JedisService {
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    private String host;
 
     private Logger log = LoggerFactory.getLogger(JedisService.class);
 
     private static final String LOCK_SUC = "OK";
 
-    private static final String RELEASE_SUC = "1L";
+    private static final Integer RELEASE_SUC = 1;
 
     private static final String RELEASE_SCRIPT = "if redis.call('get',KEYS[1])== ARGV[1] " +
             "then return redis.call('del',KEYS[1]) else return 0 end";
 
-    @Autowired
+//    @Autowired
     private JedisPool pool;
 
     public Jedis connection() {
         return pool.getResource();
-    }
-
-    public String get(String key) {
-        Jedis jedis = null;
-        try {
-            jedis = connection();
-            return jedis.get(key);
-        } finally {
-            assert jedis != null;
-            jedis.close();
-        }
     }
 
     public String set(String key, String val) {
@@ -85,7 +86,13 @@ public class JedisService {
     public boolean distributedReleaseTask(Jedis jedis, String taskName, String ip) {
         if (jedis == null) return false;
         Object eval = jedis.eval(RELEASE_SCRIPT, Collections.singletonList(taskName), Collections.singletonList(ip));
-        log.info("release result: {}", eval);
-        return RELEASE_SUC.equals(eval);
+        boolean res = RELEASE_SUC.equals(eval);
+        log.info("release result: {}", res);
+        return res;
+    }
+
+    public String get(String name) {
+        Jedis connection = connection();
+        return connection.get(name);
     }
 }

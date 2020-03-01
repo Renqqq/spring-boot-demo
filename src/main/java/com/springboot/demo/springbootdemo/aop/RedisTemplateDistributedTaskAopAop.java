@@ -1,9 +1,7 @@
 package com.springboot.demo.springbootdemo.aop;
 
-import com.springboot.demo.springbootdemo.service.JedisService;
-import org.aspectj.lang.JoinPoint;
+import com.springboot.demo.springbootdemo.service.RedisTemplateService;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
@@ -15,50 +13,57 @@ import redis.clients.jedis.Jedis;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.UUID;
 
 @Aspect
 @Component
-public class DistributedTaskAop {
+public class RedisTemplateDistributedTaskAopAop implements IDistributedLockTaskAop {
 
-    private Logger log = LoggerFactory.getLogger(DistributedTaskAop.class);
+    Logger log = LoggerFactory.getLogger(RedisTemplateDistributedTaskAopAop.class);
 
     @Autowired
-    private JedisService jedisService;
+    private RedisTemplateService redisTemplateService;
 
-    @Around("@annotation(com.springboot.demo.springbootdemo.aop.DistributedLock)")
+    @Override
+    @Around(POINT_CUT)
     public Object aroundTaskLock(ProceedingJoinPoint joinPoint) {
+
         // 在定时任务开始之前通过aop设置分布式锁,保证只有一个机器在运行定时任务
         // key: 任务名称  --> value：执行机器ip
         // 在开始之前通过redis设置key对应的值， 设置上的机器才能继续运行
         // 值要设置合理的过期时间，保证在下一次定时任务开始之前值已经过期
-        Jedis jedis = jedisService.connection();
-        Object aThis = joinPoint.getThis();
-        log.info("执行对象：{}", aThis);
-        MethodSignature method = (MethodSignature) joinPoint.getSignature();
-        String methodName = method.getName();
-        String className = method.getMethod().getDeclaringClass().getSimpleName();
-        log.info("执行方法：{}", methodName);
-        log.info("执行类：{}", className);
+        MethodSignature methodSig = (MethodSignature) joinPoint.getSignature();
+        String methodName = methodSig.getName();
+        String className = methodSig.getMethod().getDeclaringClass().getSimpleName();
+        DistributedLock lockAnno = methodSig.getMethod().getAnnotation(DistributedLock.class);
+        int expiredTime = lockAnno.expiredSecond();
         String currentIpAddress = "";
         try {
             String hostName = InetAddress.getLocalHost().getHostName();
             currentIpAddress = InetAddress.getByName(hostName).getHostAddress();
             log.info("获取机器ip：{}", currentIpAddress);
         } catch (UnknownHostException e) {
-            log.error("未知的机器ip", e);
+            log.error("未知的机器ip, 使用随机数", e);
+            currentIpAddress = UUID.randomUUID().toString();
         }
         String taskName = className + "." + methodName;
-        if (jedisService.distributedLockTask(jedis, taskName, currentIpAddress, 35)) {
+        log.info("执行定时任务名：{}", taskName);
+        if (redisTemplateService.distributedLockTask(taskName, currentIpAddress, expiredTime)) {
             // 加锁成功
-            log.info("定时任务{}在机器{}上运行！", taskName, currentIpAddress);
+            log.info("定时任务{}在当前机器{}上运行！", taskName, currentIpAddress);
             try {
                 return joinPoint.proceed();
             } catch (Throwable throwable) {
-                log.error("定时任务执行失败", throwable);
+                log.error("定时任务执行失败!", throwable);
             } finally {
                 // 释放锁
-                jedisService.distributedReleaseTask(jedis, taskName, currentIpAddress);
+                boolean release = redisTemplateService.distributedReleaseTask(taskName, currentIpAddress);
+                if (release) {
+                    log.info("分布式锁在{}上已释放", currentIpAddress);
+                }
             }
+        } else {
+            log.info("定时任务{}在机器{}上运行！", taskName, redisTemplateService.get(taskName));
         }
         return null;
     }
