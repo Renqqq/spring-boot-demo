@@ -2,7 +2,7 @@ package com.springboot.demo.springbootdemo.aop;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 
-public interface IDistributedLockTaskAop {
+public interface IDistributedLockAop {
 
     String POINT_CUT = "@annotation(com.springboot.demo.springbootdemo.aop.DistributedLock)";
 
@@ -12,5 +12,5 @@ public interface IDistributedLockTaskAop {
      * @param joinPoint join point
      * @return obj
      */
-    Object aroundTaskLock(ProceedingJoinPoint joinPoint);
+    Object aroundTaskLock(ProceedingJoinPoint joinPoint) throws Exception;
 }

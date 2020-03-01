@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import redis.clients.jedis.Jedis;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -17,16 +16,16 @@ import java.util.UUID;
 
 @Aspect
 @Component
-public class RedisTemplateDistributedTaskAopAop implements IDistributedLockTaskAop {
+public class RedisTemplateDistributedLockAop implements IDistributedLockAop {
 
-    Logger log = LoggerFactory.getLogger(RedisTemplateDistributedTaskAopAop.class);
+    Logger log = LoggerFactory.getLogger(RedisTemplateDistributedLockAop.class);
 
     @Autowired
     private RedisTemplateService redisTemplateService;
 
     @Override
     @Around(POINT_CUT)
-    public Object aroundTaskLock(ProceedingJoinPoint joinPoint) {
+    public Object aroundTaskLock(ProceedingJoinPoint joinPoint) throws Exception {
 
         // 在定时任务开始之前通过aop设置分布式锁,保证只有一个机器在运行定时任务
         // key: 任务名称  --> value：执行机器ip
@@ -36,12 +35,13 @@ public class RedisTemplateDistributedTaskAopAop implements IDistributedLockTaskA
         String methodName = methodSig.getName();
         String className = methodSig.getMethod().getDeclaringClass().getSimpleName();
         DistributedLock lockAnno = methodSig.getMethod().getAnnotation(DistributedLock.class);
-        int expiredTime = lockAnno.expiredSecond();
+        long expiredTime = lockAnno.expiredSecond();
+        boolean manualRelease = lockAnno.manualRelease();
         String currentIpAddress = "";
         try {
             String hostName = InetAddress.getLocalHost().getHostName();
             currentIpAddress = InetAddress.getByName(hostName).getHostAddress();
-            log.info("获取机器ip：{}", currentIpAddress);
+            log.info("获取机器ip:[{}]", currentIpAddress);
         } catch (UnknownHostException e) {
             log.error("未知的机器ip, 使用随机数", e);
             currentIpAddress = UUID.randomUUID().toString();
@@ -50,20 +50,26 @@ public class RedisTemplateDistributedTaskAopAop implements IDistributedLockTaskA
         log.info("执行定时任务名：{}", taskName);
         if (redisTemplateService.distributedLockTask(taskName, currentIpAddress, expiredTime)) {
             // 加锁成功
-            log.info("定时任务{}在当前机器{}上运行！", taskName, currentIpAddress);
+            log.info("定时任务{}在当前机器[{}]上运行！", taskName, currentIpAddress);
             try {
                 return joinPoint.proceed();
+            } catch (Exception e) {
+                log.error("定时任务执行失败!", e);
+                throw e;
             } catch (Throwable throwable) {
                 log.error("定时任务执行失败!", throwable);
             } finally {
                 // 释放锁
-                boolean release = redisTemplateService.distributedReleaseTask(taskName, currentIpAddress);
-                if (release) {
-                    log.info("分布式锁在{}上已释放", currentIpAddress);
+                if (manualRelease) {
+                    // 手动释放锁，不手动释放的话会根据过期时间自动释放
+                    boolean release = redisTemplateService.distributedReleaseTask(taskName, currentIpAddress);
+                    if (release) {
+                        log.info("分布式锁在{}上已释放", currentIpAddress);
+                    }
                 }
             }
         } else {
-            log.info("定时任务{}在机器{}上运行！", taskName, redisTemplateService.get(taskName));
+            log.info("定时任务{}在机器[{}]上运行！", taskName, redisTemplateService.get(taskName));
         }
         return null;
     }

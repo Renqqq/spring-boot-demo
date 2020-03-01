@@ -2,7 +2,6 @@ package com.springboot.demo.springbootdemo.aop;
 
 import com.springboot.demo.springbootdemo.service.JedisService;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
@@ -16,16 +15,16 @@ import java.net.UnknownHostException;
 
 @Aspect
 @Component
-public class JedisDistributedTaskAopAop implements IDistributedLockTaskAop {
+public class JedisDistributedLockAop implements IDistributedLockAop {
 
-    private Logger log = LoggerFactory.getLogger(JedisDistributedTaskAopAop.class);
+    private Logger log = LoggerFactory.getLogger(JedisDistributedLockAop.class);
 
     @Autowired
     private JedisService jedisService;
 
     @Override
 //    @Around(POINT_CUT)
-    public Object aroundTaskLock(ProceedingJoinPoint joinPoint) {
+    public Object aroundTaskLock(ProceedingJoinPoint joinPoint) throws Exception {
         // 在定时任务开始之前通过aop设置分布式锁,保证只有一个机器在运行定时任务
         // key: 任务名称  --> value：执行机器ip
         // 在开始之前通过redis设置key对应的值， 设置上的机器才能继续运行
@@ -44,7 +43,7 @@ public class JedisDistributedTaskAopAop implements IDistributedLockTaskAop {
         }
         String taskName = className + "." + methodName;
         DistributedLock lockAnno = method.getMethod().getAnnotation(DistributedLock.class);
-        int expiredTime = lockAnno.expiredSecond();
+        long expiredTime = lockAnno.expiredSecond();
         log.info("执行定时任务名：{}", taskName);
         if (jedisService.distributedLockTask(jedis, taskName, currentIpAddress, 35)) {
             // 加锁成功

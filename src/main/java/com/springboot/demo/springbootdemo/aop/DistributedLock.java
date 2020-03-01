@@ -15,5 +15,12 @@ public @interface DistributedLock {
      *
      * @return int
      */
-    int expiredSecond() default 1;
+    long expiredSecond() default 1;
+
+    /**
+     * 是否手动释放
+     *
+     * @return bool
+     */
+    boolean manualRelease() default true;
 }

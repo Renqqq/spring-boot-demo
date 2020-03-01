@@ -37,10 +37,10 @@ public class RedisTemplateService implements MessageListener {
      * @param expiredSeconds 过期时间
      * @return boolean
      */
-    public boolean distributedLockTask(String taskName, String ip, int expiredSeconds) {
+    public boolean distributedLockTask(String taskName, String ip, long expiredSeconds) {
         try {
             Boolean exeRes = redisTemplate.execute((RedisCallback<Boolean>) connection ->
-                    connection.set(taskName.getBytes(), ip.getBytes(), Expiration.seconds(expiredSeconds),
+                    connection.set(taskName.getBytes(), ip.getBytes(), Expiration.milliseconds(expiredSeconds),
                             RedisStringCommands.SetOption.ifAbsent()));
 
             return exeRes != null && exeRes;
