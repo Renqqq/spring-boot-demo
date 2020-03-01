@@ -34,7 +34,7 @@ public class DistributedTask {
         log.info("distributed task end running!");
     }
 
-    @DistributedLock(expiredSecond = 500, manualRelease = false)
+    @DistributedLock(expiredSecond = 120 * 1000, manualRelease = false)
     @Scheduled(initialDelay = 500, fixedDelay = 120 * 1000)
     public void testRedisLockTask1() {
         // 每分钟运行一次
